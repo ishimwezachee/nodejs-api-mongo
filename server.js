@@ -1,45 +1,91 @@
-var http = require("http");
-var MongoClient = require("mongodb").MongoClient;
-var url = "mongodb://localhost:27017/";
+const http = require('http');
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-// mongo client for interacting with the
-// mongo database
-MongoClient.connect(url, (err, db) => {
-  if (err) throw err;
-  let dbo = db.db("safari");
+const UserSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String },
+  }
+);
 
-  // this is http server
-  // it serves contents from the databases
-  http
-    .createServer(function (req, res) {
-      // setting up headers
-      res.writeHead(200, { "Content-Type": "application/json", 'Access-Control-Allow-Origin': '*' });
+const NationalParkParkSchema = new Schema(
+  {
+    name: { type: String, min: 5, max: 100 },
+    address: { type: String, min: 5, max: 200 }
+  }
+);
 
-      // users route
-      if (req.url === '/api/v1/users') {
-        // gets data from the database
-        dbo.collection('users').find({}).toArray(function (err, users) {
-          // returning users as our response
-          res.end(JSON.stringify(users));
+const User = mongoose.model('User', UserSchema);
+const NationalPark = mongoose.model('NationalPark', NationalParkParkSchema);
+
+
+const mongoDBUrl = 'mongodb://localhost:27017/safari'
+
+// connect with mongoDB
+mongoose.connect(mongoDBUrl, { useNewUrlParser: true });
+
+const port = 3000;
+const message = `Server listens at http://localhost:${port}`;
+
+http
+  .createServer((req, res) => {
+    // setting up headers
+    res.writeHead(200, { "Content-Type": "application/json", 'Access-Control-Allow-Origin': '*' });
+
+    // users route
+    if (req.url === '/api/v1/users' && req.method == 'GET') {
+      // gets data from the database
+      User.find({}, 'name email', (err, results) => {
+        if (err) {
+          console.log(err);
+        }
+
+        res.end(JSON.stringify(results));
+      });
+    }
+
+    // creates national parks
+    else if (req.url === '/api/v1/national-park' && req.method == 'POST') {
+      let data = '';
+      req.on('data', (chunk) => {
+        data += chunk;
+      });
+      req.on('end', () => {
+        const dataJson = JSON.parse(data);
+        const nationalpark = new NationalPark(
+          {
+            name: dataJson.name,
+            address: dataJson.address
+          }
+        );
+
+        nationalpark.save((err) => {
+          if (err) console.log(err);
+          res.end(JSON.stringify({ message: 'its okay' }))
         });
-      }
 
-      // national parks 
-      else if (req.url === '/api/v1/national-parks') {
-        // get the national parks from the database
-        dbo.collection('nationalParks').find({}).toArray(function (err, nationalparks) {
-          // returning national parks  as our response
-          res.end(JSON.stringify(nationalparks));
-        });
-      }
-      else if (req.url === '/') {
-        res.end(' You are home');
-      }
-      else {
-        res.end('not found');
-      }
-    })
-    .listen(8080, () => {
-      console.log("server is up: open localhost:8080");
-    });
-});
+      });
+
+    }
+
+    // gets all national parks
+    else if (req.url === '/api/v1/national-parks' && req.method == 'GET') {
+      // get the national parks from the database
+      NationalPark.find({}, 'name address', (err, results) => {
+        if (err) {
+          console.log(err);
+        }
+
+        res.end(JSON.stringify(results));
+      });
+
+    }
+    else if (req.url === '/') {
+      res.end(' You are home');
+    }
+    else {
+      res.end('not found');
+    }
+  })
+  .listen(port, () => console.log(message));
